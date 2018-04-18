@@ -17,18 +17,29 @@ func log(msg string, id int) {
 	}
 }
 
+func createWorkerId() func() int {
+	id := 0
+	return func() int {
+		id++
+		return id
+	}
+}
+
 // Use uni-directional channels
-func worker(in <-chan *Work, out chan<- *Work, id int) {
+func worker(in <-chan *Work, out chan<- *Work, generateWorkerId func() int) {
+	id := generateWorkerId()
+
 	cleanup := func() {
+		// TODO: remove this sleep and use waitgroup instead
 		time.Sleep(500 * time.Microsecond)
 		close(out)
 	}
 
 	defer cleanup()
 
-	log("creating worker with id: ", id)
+	log("Creating worker with id: ", id)
 	for w := range in {
-		log("processing with worker id: ", id)
+		log("Processing with worker id: ", id)
 		w.z = w.x * w.y
 		out <- w
 	}
@@ -51,8 +62,9 @@ func receiveResult(r *Work) {
 func Run() {
 	in, out := make(chan *Work), make(chan *Work)
 	NumWorkers := 5
+	workerIdGenerator := createWorkerId()
 	for i := 0; i < NumWorkers; i++ {
-		go worker(in, out, i)
+		go worker(in, out, workerIdGenerator)
 	}
 	go sendLotsOfWork(in)
 	for r := range out {
