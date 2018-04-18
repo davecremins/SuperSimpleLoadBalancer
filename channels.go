@@ -1,5 +1,3 @@
-
-
 package main
 
 import (
@@ -11,6 +9,7 @@ type Work struct {
    x, y, z int
 }
 
+// Use uni-directional channels
 func worker(in <-chan *Work, out chan<- *Work) {
    for w := range in {
       w.z = w.x * w.y
@@ -19,7 +18,8 @@ func worker(in <-chan *Work, out chan<- *Work) {
    close(out)
 }
 
-func sendLotsOfWork(in chan *Work){
+// Specify a send only channel
+func sendLotsOfWork(in chan<- *Work){
    for i := 0; i < 10; i++ {
       time.Sleep(200 * time.Millisecond)
       var work = &Work{i, i, i}
