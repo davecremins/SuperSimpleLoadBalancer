@@ -5,7 +5,11 @@ import (
 	"time"
 )
 
-const LOG_WORKER_ID bool = true
+const (
+	LOG_WORKER_ID bool = true
+	WORK_LOAD     int  = 15
+	NUM_WORKERS   int  = 5
+)
 
 type Work struct {
 	x, y, z int
@@ -17,6 +21,7 @@ func log(msg string, id int) {
 	}
 }
 
+// Simple closure to generate worker id
 func createWorkerId() func() int {
 	id := 0
 	return func() int {
@@ -25,19 +30,26 @@ func createWorkerId() func() int {
 	}
 }
 
-// Use uni-directional channels
-func worker(in <-chan *Work, out chan<- *Work, generateWorkerId func() int) {
-	id := generateWorkerId()
-
-	cleanup := func() {
-		// TODO: remove this sleep and use waitgroup instead
-		time.Sleep(500 * time.Microsecond)
-		close(out)
+// Simple closure to track worker count
+func manageWorkers() func() int {
+	workerCount := NUM_WORKERS
+	return func() int {
+		workerCount--
+		return workerCount
 	}
+}
 
-	defer cleanup()
-
+// Use uni-directional channels
+func worker(in <-chan *Work, out chan<- *Work, generateWorkerId func() int, manageWorkers func() int) {
+	id := generateWorkerId()
 	log("Creating worker with id: ", id)
+
+	defer func() {
+		if workersLeft := manageWorkers(); workersLeft == 0 {
+			close(out)
+		}
+	}()
+
 	for w := range in {
 		log("Processing with worker id: ", id)
 		w.z = w.x * w.y
@@ -46,11 +58,11 @@ func worker(in <-chan *Work, out chan<- *Work, generateWorkerId func() int) {
 }
 
 // Specify a send only channel
-func sendLotsOfWork(in chan<- *Work) {
+func doWork(in chan<- *Work) {
 	defer close(in)
-	for i := 0; i < 10; i++ {
+	for i := 0; i < WORK_LOAD; i++ {
 		time.Sleep(200 * time.Millisecond)
-		var work = &Work{i, i, i}
+		work := &Work{i, i, i}
 		in <- work
 	}
 }
@@ -59,19 +71,19 @@ func receiveResult(r *Work) {
 	fmt.Println("Result from worker: ", r.z)
 }
 
-func Run() {
+func run() {
 	in, out := make(chan *Work), make(chan *Work)
-	NumWorkers := 5
 	workerIdGenerator := createWorkerId()
-	for i := 0; i < NumWorkers; i++ {
-		go worker(in, out, workerIdGenerator)
+	workerManager := manageWorkers()
+	for i := 0; i < NUM_WORKERS; i++ {
+		go worker(in, out, workerIdGenerator, workerManager)
 	}
-	go sendLotsOfWork(in)
+	go doWork(in)
 	for r := range out {
 		receiveResult(r)
 	}
 }
 
 func main() {
-	Run()
+	run()
 }
